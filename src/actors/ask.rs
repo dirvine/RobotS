@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 
 use self::eventual::{Complete, Future};
 
-use actors::{Actor, ActorCell, ActorContext, ActorPath, Arguments, CanReceive, Message,
+use actors::{Actor, ActorCell, ActorContext, ActorPath, Arguments, CanReceive, InnerMessage, Message,
              SystemMessage};
 
 struct CompleteRef<V: Send + 'static, E: Send + 'static> {
@@ -14,24 +14,33 @@ struct CompleteRef<V: Send + 'static, E: Send + 'static> {
 }
 
 impl<V: Message, E: Send + 'static> CanReceive for CompleteRef<V, E> {
-    fn receive(&self, message: Box<Any>, _: Arc<CanReceive>) {
-        let cast = message.downcast::<V>();
-        match cast {
-            Ok(message) => {
-                let mut guard = self.complete.lock().unwrap();
-                let complete = guard.take();
-                *guard = None;
-                match complete {
-                    Some(complete) => {
-                        complete.complete(*message);
+    fn receive(&self, message: InnerMessage, _: Arc<CanReceive>) {
+        match message {
+            InnerMessage::Message(message) => {
+                match message.downcast::<V>() {
+                    Ok(message) => {
+                        let mut guard = self.complete.lock().unwrap();
+                        let complete = guard.take();
+                        *guard = None;
+                        match complete {
+                            Some(complete) => {
+                                complete.complete(*message);
+                            }
+                            None => {
+                                println!("Tried to send more than one message to a Complete");
+                            }
+                        }
                     }
-                    None => {
-                        println!("Tried to send more than one message to a Complete");
+                    Err(_) => {
+                        println!("Send a message of the wrong type to a future");
                     }
                 }
-            }
-            Err(_) => {
-                println!("Send a message of the wrong type to a future");
+            },
+            InnerMessage::Control(_) => {
+                // This is a panic because is this happened it would be a big error, indeed this
+                // should not happen with the current implementation, whereas sending a message of
+                // the wrong type can happen.
+                panic!("Send a control message to a future");
             }
         }
     }
@@ -48,10 +57,9 @@ impl<V: Message, E: Send + 'static> CanReceive for CompleteRef<V, E> {
 }
 
 /// Trait to implement for having the ask method.
-pub trait AskPattern<Args, M, A, V, E>: ActorContext<Args, M, A>
+pub trait AskPattern<Args, A, V, E>: ActorContext<Args, A>
 where Args: Arguments,
-      M: Message,
-      A: Actor<M> + 'static,
+      A: Actor + 'static,
       V: Message,
       E: Send + 'static
 {
@@ -61,10 +69,9 @@ where Args: Arguments,
     fn ask<MessageTo: Message>(&self, to: Arc<CanReceive>, message: MessageTo) -> Future<V, E>;
 }
 
-impl<Args, M, A, V, E> AskPattern<Args, M, A, V, E> for ActorCell<Args, M, A>
+impl<Args, A, V, E> AskPattern<Args, A, V, E> for ActorCell<Args, A>
     where Args: Arguments,
-          M: Message,
-          A: Actor<M> + 'static,
+          A: Actor + 'static,
           V: Message,
           E: Send + 'static
 {

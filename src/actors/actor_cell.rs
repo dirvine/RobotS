@@ -23,15 +23,15 @@ macro_rules! unwrap_inner {
 }
 
 /// Main interface for accessing the main Actor information (system, mailbox, sender, props...).
-pub struct ActorCell<Args: Arguments, M: Message, A: Actor<M> + 'static> {
+pub struct ActorCell<Args: Arguments, A: Actor + 'static> {
     // We have an inner structure in order to be able to generate new ActorCell easily.
-    inner_cell: Ref<InnerActorCell<Args, M, A>>,
+    inner_cell: Ref<InnerActorCell<Args, A>>,
 }
 
-unsafe impl<Args: Arguments, M: Message, A: Actor<M> + 'static> Sync for ActorCell<Args, M, A> {}
+unsafe impl<Args: Arguments, A: Actor + 'static> Sync for ActorCell<Args, A> {}
 
-impl<Args: Arguments, M: Message, A: Actor<M>> Clone for ActorCell<Args, M, A> {
-    fn clone(&self) -> ActorCell<Args, M, A> {
+impl<Args: Arguments, A: Actor> Clone for ActorCell<Args, A> {
+    fn clone(&self) -> ActorCell<Args, A> {
         ActorCell {
             inner_cell: Ref::WeakRef(match self.inner_cell {
                 Ref::StrongRef(ref inner) => Arc::downgrade(&inner),
@@ -42,15 +42,15 @@ impl<Args: Arguments, M: Message, A: Actor<M>> Clone for ActorCell<Args, M, A> {
 }
 
 
-impl<Args: Arguments, M: Message, A: Actor<M> + 'static> ActorCell<Args, M, A> {
+impl<Args: Arguments, A: Actor + 'static> ActorCell<Args, A> {
     /// Creates a new ActorCell.
     pub fn new(actor: A,
-               props: Props<Args, M, A>,
+               props: Props<Args, A>,
                system: ActorSystem,
                father: Arc<CanReceive>,
                name: Arc<String>,
                path: ActorPath)
-               -> ActorCell<Args, M, A> {
+               -> ActorCell<Args, A> {
         ActorCell {
             inner_cell: Ref::StrongRef(Arc::new(InnerActorCell::new(actor,
                                                                     props,
@@ -62,7 +62,7 @@ impl<Args: Arguments, M: Message, A: Actor<M> + 'static> ActorCell<Args, M, A> {
     }
 
     /// Puts a message with its sender in the Actor's mailbox and schedules the Actor.
-    pub fn receive_message(&self, message: InnerMessage<M>, sender: Arc<CanReceive>) {
+    pub fn receive_message(&self, message: InnerMessage, sender: Arc<CanReceive>) {
         let inner = unwrap_inner!(self.inner_cell, {
             println!("A message was send to a ref to a stopped actor");
             return;
@@ -92,19 +92,19 @@ impl<Args: Arguments, M: Message, A: Actor<M> + 'static> ActorCell<Args, M, A> {
 }
 
 /// This is the API that Actors are supposed to see of their context while handling a message.
-pub trait ActorContext<Args: Arguments, M: Message, A: Actor<M> + 'static> {
+pub trait ActorContext<Args: Arguments, A: Actor + 'static> {
     /// Returns an ActorRef of the Actor.
-    fn actor_ref(&self) -> Arc<ActorRef<Args, M, A>>;
+    fn actor_ref(&self) -> Arc<ActorRef<Args, A>>;
 
     /// Spawns an actor.
     ///
     /// Note that the supervision is not yet implemented so it does the same as creating an actor
     /// through the actor system.
-    fn actor_of<ArgsBis: Arguments, MBis: Message, ABis: Actor<MBis> + 'static>
+    fn actor_of<ArgsBis: Arguments, ABis: Actor + 'static>
         (&self,
-         props: Props<ArgsBis, MBis, ABis>,
+         props: Props<ArgsBis, ABis>,
          name: String)
-         -> Arc<ActorRef<ArgsBis, MBis, ABis>>;
+            -> Arc<ActorRef<ArgsBis, ABis>>;
 
     /// Sends a Message to the targeted CanReceive<M>.
     fn tell<MessageTo: Message>(&self, to: Arc<CanReceive>, message: MessageTo);
@@ -131,26 +131,23 @@ pub trait ActorContext<Args: Arguments, M: Message, A: Actor<M> + 'static> {
     fn path(&self) -> Arc<String>;
 }
 
-impl<Args, M, A> ActorContext<Args, M, A> for ActorCell<Args, M, A>
+impl<Args, A> ActorContext<Args, A> for ActorCell<Args, A>
     where Args: Arguments,
-          M: Message,
-          A: Actor<M> + 'static
+          A: Actor + 'static
 {
-    fn actor_ref(&self) -> Arc<ActorRef<Args, M, A>> {
+    fn actor_ref(&self) -> Arc<ActorRef<Args, A>> {
         Arc::new(ActorRef::with_cell(self.clone(), self.path()))
     }
 
-    fn actor_of<ArgsBis, MBis, ABis>(&self,
-                                     props: Props<ArgsBis, MBis, ABis>,
-                                     name: String)
-                                     -> Arc<ActorRef<ArgsBis, MBis, ABis>>
+    fn actor_of<ArgsBis, ABis>(&self,
+                               props: Props<ArgsBis, ABis>,
+                               name: String)
+        -> Arc<ActorRef<ArgsBis, ABis>>
         where ArgsBis: Arguments,
-              MBis: Message,
-              ABis: Actor<MBis> + 'static
+              ABis: Actor + 'static
     {
         let inner = unwrap_inner!(self.inner_cell, {
-            panic!("Tried to create an actor from the context of a no longer
-                                           \
+            panic!("Tried to create an actor from the context of a no longer \
                     existing actor");
         });
         let actor = props.create();
@@ -176,14 +173,12 @@ impl<Args, M, A> ActorContext<Args, M, A> for ActorCell<Args, M, A>
     }
 
     fn tell<MessageTo: Message>(&self, to: Arc<CanReceive>, message: MessageTo) {
-        to.receive(Box::new(message), self.actor_ref());
+        to.receive(InnerMessage::Message(Box::new(message)), self.actor_ref());
     }
 
     fn sender(&self) -> Arc<CanReceive> {
         let inner = unwrap_inner!(self.inner_cell, {
-            panic!("Tried to get a sender from the context of a no longer
-                                           \
-                    existing actor");
+            panic!("Tried to get a sender from the context of a no longer existing actor");
         });
         let current_sender = inner.current_sender.lock().unwrap().as_ref().unwrap().clone();
         current_sender
@@ -200,18 +195,14 @@ impl<Args, M, A> ActorContext<Args, M, A> for ActorCell<Args, M, A>
 
     fn father(&self) -> Arc<CanReceive> {
         let inner = unwrap_inner!(self.inner_cell, {
-            panic!("Tried to get the father from the context of a no
-                                             \
-                    longer existing actor");
+            panic!("Tried to get the father from the context of a no longer existing actor");
         });
         inner.father.clone()
     }
 
     fn children(&self) -> Vec<Arc<CanReceive>> {
         let inner = unwrap_inner!(self.inner_cell, {
-            panic!("Tried to get the children from the context of a no
-                                             \
-                    longer existing actor");
+            panic!("Tried to get the children from the context of a no longer existing actor");
         });
         let mut res = Vec::new();
         for child in inner.children.lock().unwrap().iter() {
@@ -222,8 +213,7 @@ impl<Args, M, A> ActorContext<Args, M, A> for ActorCell<Args, M, A>
 
     fn monitoring(&self) -> Vec<Arc<CanReceive>> {
         let inner = unwrap_inner!(self.inner_cell, {
-            panic!("Tried to get the monitored actors from the context of
-                                             \
+            panic!("Tried to get the monitored actors from the context of \
                     a no longer existing actor");
         });
         let monitoring = inner.monitoring.lock().unwrap().clone();
@@ -232,9 +222,7 @@ impl<Args, M, A> ActorContext<Args, M, A> for ActorCell<Args, M, A>
 
     fn path(&self) -> Arc<String> {
         let inner = unwrap_inner!(self.inner_cell, {
-            panic!("Tried to get the path from the context of
-                                             \
-                    a no longer existing actor");
+            panic!("Tried to get the path from the context of a no longer existing actor");
         });
         inner.path.clone()
     }
@@ -294,16 +282,16 @@ pub enum SystemMessage {
     Failure(Arc<CanReceive>),
 }
 
-struct Envelope<M: Message> {
-    message: InnerMessage<M>,
+struct Envelope {
+    message: InnerMessage,
     sender: Arc<CanReceive>,
 }
 
 /// Types of message that can be sent to an actor that will be treated normally.
 #[derive(Clone)]
-pub enum InnerMessage<M: Message> {
+pub enum InnerMessage {
     /// Regular message.
-    Message(M),
+    Message(Box<Message>),
 
     /// Control messages.
     Control(ControlMessage),
@@ -322,11 +310,11 @@ pub enum ControlMessage {
     KillMe(Arc<CanReceive>),
 }
 
-struct InnerActorCell<Args: Arguments, M: Message, A: Actor<M> + 'static> {
+struct InnerActorCell<Args: Arguments, A: Actor + 'static> {
     actor: RwLock<A>,
-    mailbox: Mutex<VecDeque<Envelope<M>>>,
+    mailbox: Mutex<VecDeque<Envelope>>,
     system_mailbox: Mutex<VecDeque<SystemMessage>>,
-    props: Props<Args, M, A>,
+    props: Props<Args, A>,
     system: ActorSystem,
     _name: Arc<String>,
     path: ActorPath,
@@ -339,14 +327,14 @@ struct InnerActorCell<Args: Arguments, M: Message, A: Actor<M> + 'static> {
     _monitored: Mutex<Vec<Arc<CanReceive>>>,
 }
 
-impl<Args: Arguments, M: Message, A: Actor<M> + 'static> InnerActorCell<Args, M, A> {
+impl<Args: Arguments, A: Actor + 'static> InnerActorCell<Args, A> {
     fn new(actor: A,
-           props: Props<Args, M, A>,
+           props: Props<Args, A>,
            system: ActorSystem,
            father: Arc<CanReceive>,
            name: Arc<String>,
            path: ActorPath)
-           -> InnerActorCell<Args, M, A> {
+           -> InnerActorCell<Args, A> {
         InnerActorCell {
             actor: RwLock::new(actor),
             mailbox: Mutex::new(VecDeque::new()),
@@ -365,11 +353,11 @@ impl<Args: Arguments, M: Message, A: Actor<M> + 'static> InnerActorCell<Args, M,
         }
     }
 
-    fn receive_envelope(&self, envelope: Envelope<M>) {
+    fn receive_envelope(&self, envelope: Envelope) {
         self.mailbox.lock().unwrap().push_back(envelope);
     }
 
-    fn receive_message(&self, message: InnerMessage<M>, sender: Arc<CanReceive>) {
+    fn receive_message(&self, message: InnerMessage, sender: Arc<CanReceive>) {
         self.receive_envelope(Envelope {
             message: message,
             sender: sender,
@@ -380,7 +368,7 @@ impl<Args: Arguments, M: Message, A: Actor<M> + 'static> InnerActorCell<Args, M,
         self.system_mailbox.lock().unwrap().push_back(system_message);
     }
 
-    fn handle_envelope(&self, context: ActorCell<Args, M, A>) {
+    fn handle_envelope(&self, context: ActorCell<Args, A>) {
         // Now we do not want users to be able to touch current_sender while the actor is busy.
         let _lock = self.busy.lock();
         let failsafe = Failsafe::new(self.father.clone(),
@@ -448,12 +436,12 @@ impl<Args: Arguments, M: Message, A: Actor<M> + 'static> InnerActorCell<Args, M,
         }
     }
 
-    fn start(&self, context: ActorCell<Args, M, A>) {
+    fn start(&self, context: ActorCell<Args, A>) {
         self.actor.write().unwrap().pre_start(context);
         *self.actor_state.write().unwrap() = ActorState::Running;
     }
 
-    fn restart(&self, context: ActorCell<Args, M, A>) {
+    fn restart(&self, context: ActorCell<Args, A>) {
         let mut actor = self.actor.write().unwrap();
         actor.pre_restart(context.clone());
         *actor = self.props.create();
@@ -462,7 +450,7 @@ impl<Args: Arguments, M: Message, A: Actor<M> + 'static> InnerActorCell<Args, M,
     }
 }
 
-impl<Args: Arguments, M: Message, A: Actor<M> + 'static> Drop for InnerActorCell<Args, M, A> {
+impl<Args: Arguments, A: Actor + 'static> Drop for InnerActorCell<Args, A> {
     fn drop(&mut self) {
         // FIXME(gamazeps) Looking at the logs it seems as though fathers are killed before their
         // children, that is not the intended behaviour.
