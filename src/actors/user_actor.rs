@@ -71,8 +71,6 @@ impl InternalUserActor {
 
 impl Actor for InternalUserActor {
     // The receive function is currently a dummy.
-    fn receive<Args: Arguments>(&self,
-                                _message: Box<Any>,
-                                _context: ActorCell<Args, InternalUserActor>) {
+    fn receive(&self, _message: Box<Any>, _context: &ActorContext) {
     }
 }

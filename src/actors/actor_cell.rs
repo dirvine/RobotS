@@ -93,19 +93,19 @@ impl<Args: Arguments, A: Actor + 'static> ActorCell<Args, A> {
 }
 
 /// This is the API that Actors are supposed to see of their context while handling a message.
-pub trait ActorContext<Args: Arguments, A: Actor + 'static> {
+pub trait ActorContext {
     /// Returns an ActorRef of the Actor.
-    fn actor_ref(&self) -> Arc<ActorRef<Args, A>>;
+    fn actor_ref(&self) -> Arc<CanReceive>;
 
     /// Spawns an actor.
     ///
     /// Note that the supervision is not yet implemented so it does the same as creating an actor
     /// through the actor system.
-    fn actor_of<ArgsBis: Arguments, ABis: Actor + 'static>
+    fn actor_of<Args: Arguments, A: Actor + 'static>
         (&self,
-         props: Props<ArgsBis, ABis>,
+         props: Props<Args, A>,
          name: String)
-            -> Arc<ActorRef<ArgsBis, ABis>>;
+            -> Arc<ActorRef<Args, A>>;
 
     /// Sends a Message to the targeted CanReceive<M>.
     fn tell<MessageTo: Message>(&self, to: Arc<CanReceive>, message: MessageTo);
@@ -132,11 +132,11 @@ pub trait ActorContext<Args: Arguments, A: Actor + 'static> {
     fn path(&self) -> Arc<String>;
 }
 
-impl<Args, A> ActorContext<Args, A> for ActorCell<Args, A>
+impl<Args, A> ActorContext for ActorCell<Args, A>
     where Args: Arguments,
           A: Actor + 'static
 {
-    fn actor_ref(&self) -> Arc<ActorRef<Args, A>> {
+    fn actor_ref(&self) -> Arc<CanReceive> {
         Arc::new(ActorRef::with_cell(self.clone(), self.path()))
     }
 
@@ -406,7 +406,7 @@ impl<Args: Arguments, A: Actor + 'static> InnerActorCell<Args, A> {
             {
                 let actor = self.actor.read().unwrap();
                 match envelope.message {
-                    InnerMessage::Message(message) => actor.receive(message, context),
+                    InnerMessage::Message(message) => actor.receive(message, &context),
                     InnerMessage::Control(message) => {
                         match message {
                             ControlMessage::PoisonPill => context.kill_me(),

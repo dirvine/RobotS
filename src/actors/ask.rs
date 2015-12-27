@@ -57,10 +57,8 @@ impl<V: Message, E: Send + 'static> CanReceive for CompleteRef<V, E> {
 }
 
 /// Trait to implement for having the ask method.
-pub trait AskPattern<Args, A, V, E>: ActorContext<Args, A>
-where Args: Arguments,
-      A: Actor + 'static,
-      V: Message,
+pub trait AskPattern<V, E>: ActorContext
+where V: Message,
       E: Send + 'static
 {
     /// Sends a request to an Actor and stores the potential result in a Future.
@@ -69,7 +67,7 @@ where Args: Arguments,
     fn ask<MessageTo: Message>(&self, to: Arc<CanReceive>, message: MessageTo) -> Future<V, E>;
 }
 
-impl<Args, A, V, E> AskPattern<Args, A, V, E> for ActorCell<Args, A>
+impl<Args, A, V, E> AskPattern<V, E> for ActorCell<Args, A>
     where Args: Arguments,
           A: Actor + 'static,
           V: Message,

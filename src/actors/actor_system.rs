@@ -66,9 +66,7 @@ impl ActorSystem {
     }
 
     /// Enqueues the given Actor on the queue of Actors with something to handle.
-    pub fn enqueue_actor<Args, A>(&self, actor_ref: Arc<ActorRef<Args, A>>)
-        where Args: Arguments,
-              A: Actor + 'static
+    pub fn enqueue_actor(&self, actor_ref: Arc<CanReceive>)
     {
         self.inner.enqueue_actor(actor_ref);
     }
@@ -196,9 +194,7 @@ impl InnerActorSystem {
     }
 
     /// Enqueues the given Actor on the queue of Actors with something to handle.
-    fn enqueue_actor<Args, A>(&self, actor_ref: Arc<ActorRef<Args, A>>)
-        where Args: Arguments,
-              A: Actor + 'static
+    fn enqueue_actor(&self, actor_ref: Arc<CanReceive>)
     {
         match self.actors_queue_sender.lock().unwrap().send(actor_ref) {
             Ok(_) => return,

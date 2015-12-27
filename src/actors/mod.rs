@@ -52,7 +52,7 @@ pub trait Actor: Send + Sync + Sized {
     // done in order to have nicer code for the downcasts (indeed, I can't implement downcast
     // methods for Box<Message>).
     // Checks for sending data with the Message trait is done in the sending phase.
-    fn receive<Args: Arguments>(&self, message: Box<Any>, context: ActorCell<Args, Self>);
+    fn receive(&self, message: Box<Any>, context: &ActorContext);
 
     /// Method called when a monitored actor is terminated.
     ///
