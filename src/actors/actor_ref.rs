@@ -2,10 +2,9 @@ extern crate eventual;
 
 use self::eventual::Future;
 
-use std::any::Any;
 use std::sync::Arc;
 
-use actors::{Actor, ActorContext, Arguments, ControlMessage, InnerMessage, Message, SystemMessage};
+use actors::{Actor, ActorContext, Arguments, InnerMessage, Message, SystemMessage};
 use actors::actor_cell::ActorCell;
 use actors::ask::AskPattern;
 

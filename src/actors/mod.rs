@@ -1,5 +1,4 @@
-use std::mem;
-use std::any::Any;
+pub use std::any::Any;
 
 pub use self::actor_cell::{ActorCell, ActorContext, ControlMessage, InnerMessage, SystemMessage};
 pub use self::actor_ref::{CanReceive, ActorPath, ActorRef};

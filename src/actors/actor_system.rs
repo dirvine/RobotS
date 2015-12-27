@@ -2,7 +2,7 @@ use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{channel, Receiver, Sender, TryRecvError};
 use std::thread;
 
-use actors::{Actor, ActorRef, Arguments, CanReceive, Message, Props};
+use actors::{Actor, ActorRef, Arguments, CanReceive, Props};
 use actors::cthulhu::Cthulhu;
 use actors::user_actor::UserActorRef;
 

@@ -1,3 +1,4 @@
+use std::any::Any;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, RwLock, Weak};
 
@@ -185,11 +186,11 @@ impl<Args, A> ActorContext<Args, A> for ActorCell<Args, A>
     }
 
     fn stop(&self, actor_ref: Arc<CanReceive>) {
-        actor_ref.receive(Box::new(ControlMessage::PoisonPill), self.actor_ref());
+        actor_ref.receive(InnerMessage::Control(ControlMessage::PoisonPill), self.actor_ref());
     }
 
     fn kill_me(&self) {
-        self.father().receive(Box::new(ControlMessage::KillMe(self.actor_ref())),
+        self.father().receive(InnerMessage::Control(ControlMessage::KillMe(self.actor_ref())),
                               self.actor_ref());
     }
 
@@ -288,10 +289,9 @@ struct Envelope {
 }
 
 /// Types of message that can be sent to an actor that will be treated normally.
-#[derive(Clone)]
 pub enum InnerMessage {
     /// Regular message.
-    Message(Box<Message>),
+    Message(Box<Any + Send>),
 
     /// Control messages.
     Control(ControlMessage),

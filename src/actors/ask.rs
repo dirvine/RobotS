@@ -17,7 +17,7 @@ impl<V: Message, E: Send + 'static> CanReceive for CompleteRef<V, E> {
     fn receive(&self, message: InnerMessage, _: Arc<CanReceive>) {
         match message {
             InnerMessage::Message(message) => {
-                match message.downcast::<V>() {
+                match Box::<Any + Send>::downcast::<V>(message) {
                     Ok(message) => {
                         let mut guard = self.complete.lock().unwrap();
                         let complete = guard.take();
@@ -81,7 +81,7 @@ impl<Args, A, V, E> AskPattern<Args, A, V, E> for ActorCell<Args, A>
             complete: Mutex::new(Some(complete)),
             path: Arc::new("".to_owned()),
         };
-        to.receive(Box::new(message), Arc::new(complete_ref));
+        to.receive(InnerMessage::Message(Box::new(message)), Arc::new(complete_ref));
         future
     }
 }

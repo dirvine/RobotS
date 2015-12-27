@@ -1,7 +1,6 @@
-use std::marker::PhantomData;
 use std::sync::Arc;
 
-use actors::{Actor, Arguments, Message};
+use actors::{Actor, Arguments};
 
 /// Factory for `A`.
 ///

@@ -2,7 +2,7 @@ use std::any::Any;
 use std::sync::Arc;
 
 use actors::{Actor, ActorCell, ActorContext, ActorPath, ActorRef, ActorSystem, Arguments,
-             CanReceive, ControlMessage, InnerMessage, Message, Props, SystemMessage};
+             CanReceive, InnerMessage, Props, SystemMessage};
 use actors::cthulhu::Cthulhu;
 
 pub struct UserActorRef {
