@@ -1,0 +1,1 @@
+initSidebarItems({"trait":[["AskPattern","Trait to implement for having the ask method."]]});
